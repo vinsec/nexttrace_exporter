@@ -223,9 +223,7 @@ jobs:
             ${{ steps.check_dockerhub.outputs.available == 'true' && format('{0}/nexttrace_exporter', secrets.DOCKER_USERNAME) || '' }}
             ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}},value=${{ needs.create-release.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.create-release.outputs.version }}
-            type=semver,pattern={{major}},value=${{ needs.create-release.outputs.version }}
+            type=raw,value=${{ needs.create-release.outputs.version }}
             type=raw,value=latest
 
       - name: Build and push

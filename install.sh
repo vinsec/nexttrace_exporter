@@ -57,22 +57,42 @@ if ! command -v nexttrace &> /dev/null; then
 fi
 
 # Download binary
-DOWNLOAD_URL="https://github.com/vinsec/nexttrace_exporter/releases/download/${VERSION}/${BINARY_NAME}-${OS}-${ARCH}"
+if [ "$VERSION" = "latest" ]; then
+    DOWNLOAD_URL="https://github.com/vinsec/nexttrace_exporter/releases/latest/download/nexttrace_exporter-${OS}-${ARCH}.tar.gz"
+else
+    DOWNLOAD_URL="https://github.com/vinsec/nexttrace_exporter/releases/download/${VERSION}/nexttrace_exporter-${VERSION}-${OS}-${ARCH}.tar.gz"
+fi
 
 echo "Downloading ${BINARY_NAME}..."
+TEMP_DIR=$(mktemp -d)
+ARCHIVE_FILE="${TEMP_DIR}/nexttrace_exporter.tar.gz"
+
 if command -v curl &> /dev/null; then
-    curl -L "$DOWNLOAD_URL" -o "/tmp/${BINARY_NAME}"
+    curl -L "$DOWNLOAD_URL" -o "$ARCHIVE_FILE"
 elif command -v wget &> /dev/null; then
-    wget "$DOWNLOAD_URL" -O "/tmp/${BINARY_NAME}"
+    wget "$DOWNLOAD_URL" -O "$ARCHIVE_FILE"
 else
     echo -e "${RED}Error: Neither curl nor wget found${NC}"
+    rm -rf "$TEMP_DIR"
     exit 1
 fi
 
+# Extract binary
+echo "Extracting archive..."
+tar xzf "$ARCHIVE_FILE" -C "$TEMP_DIR"
+
 # Install binary
 echo "Installing ${BINARY_NAME} to ${INSTALL_DIR}..."
-chmod +x "/tmp/${BINARY_NAME}"
-mv "/tmp/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
+chmod +x "${TEMP_DIR}/${BINARY_NAME}"
+mv "${TEMP_DIR}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
+
+# Copy example config if available
+if [ -f "${TEMP_DIR}/config.yml.example" ]; then
+    echo "Example configuration found"
+fi
+
+# Clean up
+rm -rf "$TEMP_DIR"
 
 # Set capabilities (alternative to running as root)
 echo "Setting capabilities..."
