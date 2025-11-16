@@ -13,10 +13,11 @@ on:
 
 permissions:
   contents: write
+  packages: write  # For GHCR
 
 jobs:
   build:
-    name: Build and Release
+    name: Build and Release (${{ matrix.goos }}, ${{ matrix.goarch }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -73,59 +74,63 @@ jobs:
           COMMIT="${{ steps.git_info.outputs.commit }}"
           BUILD_TIME="${{ steps.git_info.outputs.date }}"
           
-          # Set output filename
+          # Set binary name (without version/arch info)
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            OUTPUT="nexttrace_exporter-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}.exe"
+            BINARY_NAME="nexttrace_exporter.exe"
           else
-            OUTPUT="nexttrace_exporter-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
-          fi
-          
-          # Add ARM version suffix if applicable
-          if [ -n "${{ matrix.goarm }}" ]; then
-            OUTPUT="${OUTPUT}v${{ matrix.goarm }}"
+            BINARY_NAME="nexttrace_exporter"
           fi
           
           # Build with version info
           go build -v -trimpath \
             -ldflags "-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${COMMIT}" \
-            -o "${OUTPUT}" .
+            -o "${BINARY_NAME}" .
           
-          # Create checksum
-          if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "${OUTPUT}" > "${OUTPUT}.sha256"
-          else
-            shasum -a 256 "${OUTPUT}" > "${OUTPUT}.sha256"
-          fi
-          
-          echo "artifact=${OUTPUT}" >> $GITHUB_OUTPUT
-          echo "checksum=${OUTPUT}.sha256" >> $GITHUB_OUTPUT
+          echo "binary=${BINARY_NAME}" >> $GITHUB_OUTPUT
         id: build
 
       - name: Create archive
         run: |
-          ARTIFACT="${{ steps.build.outputs.artifact }}"
-          ARCHIVE_NAME="${ARTIFACT%.*}.tar.gz"
+          VERSION="${{ steps.version.outputs.version }}"
+          BINARY="${{ steps.build.outputs.binary }}"
           
-          # Prepare files to include
-          FILES="${ARTIFACT} ${ARTIFACT}.sha256 README.md LICENSE"
-          
-          # Add config.yml if exists
-          if [ -f "config.yml" ]; then
-            FILES="${FILES} config.yml"
-          elif [ -f "examples/config.yml" ]; then
-            cp examples/config.yml config.yml.example
-            FILES="${FILES} config.yml.example"
-          fi
-          
-          # For Windows, create .zip instead
+          # Create archive name with version and architecture
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            ARCHIVE_NAME="${ARTIFACT%.*}.zip"
-            zip "${ARCHIVE_NAME}" ${FILES}
+            ARCHIVE_NAME="nexttrace_exporter-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
           else
-            tar czf "${ARCHIVE_NAME}" ${FILES}
+            ARCHIVE_NAME="nexttrace_exporter-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
           fi
           
-          echo "archive=${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
+          # Add ARM version suffix if applicable
+          if [ -n "${{ matrix.goarm }}" ]; then
+            ARCHIVE_NAME="${ARCHIVE_NAME}v${{ matrix.goarm }}"
+          fi
+          
+          # Prepare config example
+          if [ -f "examples/config.yml" ]; then
+            cp examples/config.yml config.yml.example
+          elif [ -f "config.yml" ]; then
+            cp config.yml config.yml.example
+          fi
+          
+          # Create archive with only binary and config
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip "${ARCHIVE_NAME}.zip" "${BINARY}" config.yml.example
+            ARCHIVE_FILE="${ARCHIVE_NAME}.zip"
+          else
+            tar czf "${ARCHIVE_NAME}.tar.gz" "${BINARY}" config.yml.example
+            ARCHIVE_FILE="${ARCHIVE_NAME}.tar.gz"
+          fi
+          
+          # Create checksum for the archive (not the binary)
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${ARCHIVE_FILE}" > "${ARCHIVE_FILE}.sha256"
+          else
+            shasum -a 256 "${ARCHIVE_FILE}" > "${ARCHIVE_FILE}.sha256"
+          fi
+          
+          echo "archive=${ARCHIVE_FILE}" >> $GITHUB_OUTPUT
+          echo "checksum=${ARCHIVE_FILE}.sha256" >> $GITHUB_OUTPUT
         id: archive
 
       - name: Upload artifact
@@ -133,9 +138,8 @@ jobs:
         with:
           name: nexttrace_exporter-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('v{0}', matrix.goarm) || '' }}
           path: |
-            ${{ steps.build.outputs.artifact }}
-            ${{ steps.build.outputs.checksum }}
             ${{ steps.archive.outputs.archive }}
+            ${{ steps.archive.outputs.checksum }}
           retention-days: 5
 
       - name: Check if release exists
@@ -161,7 +165,7 @@ jobs:
         run: |
           RELEASE_ID="${{ steps.check_release.outputs.release_id }}"
           ARCHIVE_NAME="${{ steps.archive.outputs.archive }}"
-          CHECKSUM_NAME="${{ steps.build.outputs.checksum }}"
+          CHECKSUM_NAME="${{ steps.archive.outputs.checksum }}"
           
           # Get all assets for this release
           ASSETS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
@@ -184,7 +188,7 @@ jobs:
           tag_name: ${{ steps.version.outputs.version }}
           files: |
             ${{ steps.archive.outputs.archive }}
-            ${{ steps.build.outputs.checksum }}
+            ${{ steps.archive.outputs.checksum }}
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -192,7 +196,6 @@ jobs:
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
 
   docker:
     name: Build and Push Docker Images
@@ -217,15 +220,26 @@ jobs:
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Check Docker Hub credentials
+        id: check_dockerhub
+        run: |
+          if [ -n "${{ secrets.DOCKER_USERNAME }}" ] && [ -n "${{ secrets.DOCKER_PASSWORD }}" ]; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "✅ Docker Hub credentials are configured"
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "⚠️  Docker Hub credentials not configured, will only push to GHCR"
+            echo "To push to Docker Hub, add DOCKER_USERNAME and DOCKER_PASSWORD secrets"
+          fi
+
       - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
+        if: steps.check_dockerhub.outputs.available == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -237,20 +251,20 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ secrets.DOCKER_USERNAME }}/nexttrace_exporter
+            ${{ steps.check_dockerhub.outputs.available == 'true' && format('{0}/nexttrace_exporter', secrets.DOCKER_USERNAME) || '' }}
             ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}},value=${{ steps.version.outputs.version }}
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64,linux/arm/v7
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -259,3 +273,33 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
             COMMIT=${{ github.sha }}
             BUILD_TIME=${{ github.event.repository.updated_at }}
+
+      - name: Docker Hub push summary
+        if: steps.check_dockerhub.outputs.available == 'true'
+        run: |
+          echo "### 🐳 Docker Images Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Docker Hub:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/nexttrace_exporter:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/nexttrace_exporter:latest" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**GitHub Container Registry:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ghcr.io/${{ github.repository }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: GHCR only summary
+        if: steps.check_dockerhub.outputs.available != 'true'
+        run: |
+          echo "### 🐳 Docker Images Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️  Only published to GitHub Container Registry (Docker Hub credentials not configured)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**GitHub Container Registry:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ghcr.io/${{ github.repository }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
