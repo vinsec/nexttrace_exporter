@@ -102,8 +102,8 @@ func (e *Executor) executeTarget(parentCtx context.Context, target config.Target
 	e.cancelFuncs[target.Name] = cancel
 	e.cancelFuncMutex.Unlock()
 
-	// Build command arguments with -j flag for JSON output
-	args := []string{"-j", target.Host}
+	// Build command arguments with -j flag for JSON output, --no-color to disable ANSI color codes, and -M to disable map upload
+	args := []string{"-j", "--no-color", "-M", target.Host}
 	if target.MaxHops > 0 {
 		args = append(args, "--max-hops", fmt.Sprintf("%d", target.MaxHops))
 	}

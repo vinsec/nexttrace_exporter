@@ -1,8 +1,10 @@
 package parser
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
 )
 
 // NextTraceRawResult represents the raw JSON output from nexttrace -j
@@ -69,8 +71,11 @@ type Hop struct {
 
 // ParseNextTraceOutput parses the JSON output from nexttrace -j command
 func ParseNextTraceOutput(data []byte) (*NextTraceResult, error) {
+	// Clean the output: remove ANSI escape sequences and extract only the JSON part
+	cleanedData := cleanNextTraceOutput(data)
+
 	var raw NextTraceRawResult
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(cleanedData, &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse nexttrace JSON: %w", err)
 	}
 
@@ -167,4 +172,20 @@ func (h *Hop) AverageRTT() float64 {
 // HasValidIP checks if the hop has a valid IP address
 func (h *Hop) HasValidIP() bool {
 	return h.IP != "" && h.IP != "*"
+}
+
+// cleanNextTraceOutput removes ANSI escape sequences and extracts the JSON part
+func cleanNextTraceOutput(data []byte) []byte {
+	// Remove ANSI escape sequences (color codes)
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	cleaned := ansiRegex.ReplaceAll(data, []byte(""))
+
+	// Find the first { which marks the start of JSON
+	jsonStart := bytes.IndexByte(cleaned, '{')
+	if jsonStart == -1 {
+		return data // Return original if no JSON found
+	}
+
+	// Extract from { to the end
+	return cleaned[jsonStart:]
 }
