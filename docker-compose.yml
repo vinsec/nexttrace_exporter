@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   nexttrace_exporter:
     image: vinsec/nexttrace_exporter:latest
