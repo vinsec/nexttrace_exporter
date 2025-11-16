@@ -16,9 +16,41 @@ permissions:
   packages: write  # For GHCR
 
 jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build:
     name: Build and Release (${{ matrix.goos }}, ${{ matrix.goarch }})
     runs-on: ubuntu-latest
+    needs: create-release
     strategy:
       matrix:
         include:
@@ -49,15 +81,6 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: Get version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Get git info
         id: git_info
         run: |
@@ -70,7 +93,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ needs.create-release.outputs.version }}"
           COMMIT="${{ steps.git_info.outputs.commit }}"
           BUILD_TIME="${{ steps.git_info.outputs.date }}"
           
@@ -91,7 +114,7 @@ jobs:
 
       - name: Create archive
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ needs.create-release.outputs.version }}"
           BINARY="${{ steps.build.outputs.binary }}"
           
           # Create archive name with version and architecture
@@ -142,65 +165,20 @@ jobs:
             ${{ steps.archive.outputs.checksum }}
           retention-days: 5
 
-      - name: Check if release exists
-        id: check_release
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${VERSION}" \
-            | jq -r '.id // empty')
-          
-          if [ ! -z "$RELEASE_ID" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
-            echo "Release ${VERSION} already exists with ID: ${RELEASE_ID}"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Release ${VERSION} does not exist"
-          fi
-
-      - name: Delete existing release assets
-        if: github.event_name == 'workflow_dispatch' && steps.check_release.outputs.exists == 'true'
-        run: |
-          RELEASE_ID="${{ steps.check_release.outputs.release_id }}"
-          ARCHIVE_NAME="${{ steps.archive.outputs.archive }}"
-          CHECKSUM_NAME="${{ steps.archive.outputs.checksum }}"
-          
-          # Get all assets for this release
-          ASSETS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets")
-          
-          # Delete matching assets
-          for asset_name in "$ARCHIVE_NAME" "$CHECKSUM_NAME"; do
-            ASSET_ID=$(echo "$ASSETS" | jq -r ".[] | select(.name == \"$asset_name\") | .id")
-            if [ ! -z "$ASSET_ID" ] && [ "$ASSET_ID" != "null" ]; then
-              echo "Deleting existing asset: $asset_name (ID: $ASSET_ID)"
-              curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                "https://api.github.com/repos/${{ github.repository }}/releases/assets/${ASSET_ID}"
-            fi
-          done
-
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
-          tag_name: ${{ steps.version.outputs.version }}
+          tag_name: ${{ needs.create-release.outputs.version }}
           files: |
             ${{ steps.archive.outputs.archive }}
             ${{ steps.archive.outputs.checksum }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   docker:
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
-    needs: build
+    needs: [create-release, build]
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -210,15 +188,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Get version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
 
       - name: Check Docker Hub credentials
         id: check_dockerhub
@@ -254,10 +223,55 @@ jobs:
             ${{ steps.check_dockerhub.outputs.available == 'true' && format('{0}/nexttrace_exporter', secrets.DOCKER_USERNAME) || '' }}
             ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }}
-            type=semver,pattern={{major}},value=${{ steps.version.outputs.version }}
+            type=semver,pattern={{version}},value=${{ needs.create-release.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.create-release.outputs.version }}
+            type=semver,pattern={{major}},value=${{ needs.create-release.outputs.version }}
             type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ needs.create-release.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ github.event.repository.updated_at }}
+
+      - name: Docker Hub push summary
+        if: steps.check_dockerhub.outputs.available == 'true'
+        run: |
+          echo "### 🐳 Docker Images Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Docker Hub:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/nexttrace_exporter:${{ needs.create-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/nexttrace_exporter:latest" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**GitHub Container Registry:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ghcr.io/${{ github.repository }}:${{ needs.create-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ghcr.io/${{ github.repository }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: GHCR only summary
+        if: steps.check_dockerhub.outputs.available != 'true'
+        run: |
+          echo "### 🐳 Docker Images Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️  Only published to GitHub Container Registry (Docker Hub credentials not configured)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**GitHub Container Registry:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ghcr.io/${{ github.repository }}:${{ needs.create-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ghcr.io/${{ github.repository }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Build and push
         uses: docker/build-push-action@v5
