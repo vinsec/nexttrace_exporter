@@ -27,7 +27,7 @@ var (
 	listenAddress = kingpin.Flag(
 		"web.listen-address",
 		"Address to listen on for web interface and telemetry.",
-	).Default(":9101").String()
+	).Default("localhost:9101").String()
 
 	metricsPath = kingpin.Flag(
 		"web.telemetry-path",
@@ -98,6 +98,14 @@ func main() {
 
 	// Register collector
 	server.registry.MustRegister(server.collector)
+
+	// Use config file values if command-line flags are at default
+	if *listenAddress == "localhost:9101" && cfg.Server.ListenAddress != "" {
+		listenAddress = &cfg.Server.ListenAddress
+	}
+	if *metricsPath == "/metrics" && cfg.Server.MetricsPath != "" {
+		metricsPath = &cfg.Server.MetricsPath
+	}
 
 	// Start executor
 	server.executor.Start(ctx, cfg.Targets)

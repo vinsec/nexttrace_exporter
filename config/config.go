@@ -10,7 +10,14 @@ import (
 
 // Config represents the main configuration structure
 type Config struct {
-	Targets []Target `yaml:"targets"`
+	Server  ServerConfig `yaml:"server"`
+	Targets []Target     `yaml:"targets"`
+}
+
+// ServerConfig represents the HTTP server configuration
+type ServerConfig struct {
+	ListenAddress string `yaml:"listen_address"`
+	MetricsPath   string `yaml:"metrics_path"`
 }
 
 // Target represents a single nexttrace target configuration
@@ -84,6 +91,14 @@ func LoadConfig(filename string) (*Config, error) {
 
 // Validate checks if the configuration is valid
 func (c *Config) Validate() error {
+	// Set default server config if not specified
+	if c.Server.ListenAddress == "" {
+		c.Server.ListenAddress = "localhost:9101"
+	}
+	if c.Server.MetricsPath == "" {
+		c.Server.MetricsPath = "/metrics"
+	}
+
 	if len(c.Targets) == 0 {
 		return fmt.Errorf("no targets defined in configuration")
 	}

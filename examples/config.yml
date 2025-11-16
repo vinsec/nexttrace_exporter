@@ -1,11 +1,28 @@
 # NextTrace Exporter Configuration Example
 
+# HTTP Server Configuration (optional)
+# Command-line flags take precedence over these values
+server:
+  # Listen address for the HTTP server
+  # Default: localhost:9101 (local only, recommended for security)
+  # Examples:
+  #   - localhost:9101  (local only)
+  #   - 0.0.0.0:9101    (all interfaces)
+  #   - :9101           (all interfaces, short form)
+  #   - 192.168.1.100:9101  (specific IP)
+  listen_address: localhost:9101
+  
+  # Path where metrics are exposed
+  # Default: /metrics
+  metrics_path: /metrics
+
+# Targets configuration
 targets:
   # Google DNS
   - host: 8.8.8.8
     name: google_dns
-    interval: 5m
-    max_hops: 30
+    interval: 5m      # Check every 5 minutes
+    max_hops: 30      # Maximum 30 hops
 
   # Cloudflare DNS
   - host: 1.1.1.1
