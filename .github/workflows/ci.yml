@@ -54,7 +54,7 @@ jobs:
           go build -v -o nexttrace_exporter-${{ matrix.goos }}-${{ matrix.goarch }} .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: nexttrace_exporter-${{ matrix.goos }}-${{ matrix.goarch }}
           path: nexttrace_exporter-${{ matrix.goos }}-${{ matrix.goarch }}
