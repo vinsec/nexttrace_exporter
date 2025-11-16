@@ -57,11 +57,20 @@ if ! command -v nexttrace &> /dev/null; then
 fi
 
 # Download binary
+# Determine the actual version to download
 if [ "$VERSION" = "latest" ]; then
-    DOWNLOAD_URL="https://github.com/vinsec/nexttrace_exporter/releases/latest/download/nexttrace_exporter-${OS}-${ARCH}.tar.gz"
+    echo "Fetching latest release version..."
+    ACTUAL_VERSION=$(curl -sL https://api.github.com/repos/vinsec/nexttrace_exporter/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    if [ -z "$ACTUAL_VERSION" ]; then
+        echo -e "${RED}Error: Failed to fetch latest version${NC}"
+        exit 1
+    fi
+    echo "Latest version: $ACTUAL_VERSION"
 else
-    DOWNLOAD_URL="https://github.com/vinsec/nexttrace_exporter/releases/download/${VERSION}/nexttrace_exporter-${VERSION}-${OS}-${ARCH}.tar.gz"
+    ACTUAL_VERSION="$VERSION"
 fi
+
+DOWNLOAD_URL="https://github.com/vinsec/nexttrace_exporter/releases/download/${ACTUAL_VERSION}/nexttrace_exporter-${ACTUAL_VERSION}-${OS}-${ARCH}.tar.gz"
 
 echo "Downloading ${BINARY_NAME}..."
 TEMP_DIR=$(mktemp -d)
