@@ -8,7 +8,7 @@
 
 ## English
 
-A Prometheus exporter for [NextTrace](https://github.com/sjlleo/nexttrace), providing continuous route tracing metrics with RTT, packet loss, ASN, and geolocation information.
+A Prometheus exporter for [NextTrace](https://github.com/nxtrace/NTrace-core), providing continuous route tracing metrics with RTT, packet loss, ASN, and geolocation information.
 
 ### ✨ Features
 
@@ -23,9 +23,9 @@ A Prometheus exporter for [NextTrace](https://github.com/sjlleo/nexttrace), prov
 
 #### Prerequisites
 
-Install [NextTrace](https://github.com/sjlleo/nexttrace):
+Install [NextTrace](https://github.com/nxtrace/NTrace-core):
 ```bash
-curl -sSL https://raw.githubusercontent.com/sjlleo/nexttrace/main/install.sh | sudo bash
+curl -sL nxtrace.org/nt | sudo bash
 ```
 
 #### Installation
@@ -180,7 +180,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ### 🙏 Acknowledgments
 
-- [NextTrace](https://github.com/sjlleo/nexttrace) - The underlying route tracing tool
+- [NextTrace](https://github.com/nxtrace/NTrace-core) - The underlying route tracing tool
 - [Prometheus](https://prometheus.io/) - Metrics and monitoring system
 
 ---
@@ -189,7 +189,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 中文
 
-一个用于 [NextTrace](https://github.com/sjlleo/nexttrace) 的 Prometheus Exporter，提供持续的路由追踪指标，包括 RTT、丢包率、ASN 和地理位置信息。
+一个用于 [NextTrace](https://github.com/nxtrace/NTrace-core) 的 Prometheus Exporter，提供持续的路由追踪指标，包括 RTT、丢包率、ASN 和地理位置信息。
 
 ### ✨ 特性
 
@@ -204,9 +204,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 #### 前置要求
 
-安装 [NextTrace](https://github.com/sjlleo/nexttrace)：
+安装 [NextTrace](https://github.com/nxtrace/NTrace-core)：
 ```bash
-curl -sSL https://raw.githubusercontent.com/sjlleo/nexttrace/main/install.sh | sudo bash
+curl -sL nxtrace.org/nt | sudo bash
 ```
 
 #### 安装
@@ -361,7 +361,7 @@ MIT License - 详见 [LICENSE](LICENSE) 文件。
 
 ### 🙏 致谢
 
-- [NextTrace](https://github.com/sjlleo/nexttrace) - 底层路由追踪工具
+- [NextTrace](https://github.com/nxtrace/NTrace-core) - 底层路由追踪工具
 - [Prometheus](https://prometheus.io/) - 指标和监控系统
 
 ---

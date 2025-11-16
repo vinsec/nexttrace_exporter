@@ -48,7 +48,7 @@ echo "Detected Architecture: $ARCH"
 if ! command -v nexttrace &> /dev/null; then
     echo -e "${YELLOW}Warning: nexttrace is not installed${NC}"
     echo "Please install nexttrace first:"
-    echo "  curl -sSL https://raw.githubusercontent.com/sjlleo/nexttrace/main/install.sh | sudo bash"
+    echo "  curl -sL nxtrace.org/nt | sudo bash"
     read -p "Continue anyway? (y/N) " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then

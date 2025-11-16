@@ -28,7 +28,7 @@ FROM alpine:latest AS nexttrace-installer
 RUN apk add --no-cache curl bash
 
 # Download and install nexttrace
-RUN curl -sSL https://raw.githubusercontent.com/sjlleo/nexttrace/main/install.sh | bash
+RUN curl -sL nxtrace.org/nt | bash
 
 # Stage 3: Final runtime image
 FROM alpine:latest
