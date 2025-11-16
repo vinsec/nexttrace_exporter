@@ -138,8 +138,47 @@ jobs:
             ${{ steps.archive.outputs.archive }}
           retention-days: 5
 
+      - name: Check if release exists
+        id: check_release
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${VERSION}" \
+            | jq -r '.id // empty')
+          
+          if [ ! -z "$RELEASE_ID" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
+            echo "Release ${VERSION} already exists with ID: ${RELEASE_ID}"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release ${VERSION} does not exist"
+          fi
+
+      - name: Delete existing release assets
+        if: github.event_name == 'workflow_dispatch' && steps.check_release.outputs.exists == 'true'
+        run: |
+          RELEASE_ID="${{ steps.check_release.outputs.release_id }}"
+          ARCHIVE_NAME="${{ steps.archive.outputs.archive }}"
+          CHECKSUM_NAME="${{ steps.build.outputs.checksum }}"
+          
+          # Get all assets for this release
+          ASSETS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets")
+          
+          # Delete matching assets
+          for asset_name in "$ARCHIVE_NAME" "$CHECKSUM_NAME"; do
+            ASSET_ID=$(echo "$ASSETS" | jq -r ".[] | select(.name == \"$asset_name\") | .id")
+            if [ ! -z "$ASSET_ID" ] && [ "$ASSET_ID" != "null" ]; then
+              echo "Deleting existing asset: $asset_name (ID: $ASSET_ID)"
+              curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                "https://api.github.com/repos/${{ github.repository }}/releases/assets/${ASSET_ID}"
+            fi
+          done
+
       - name: Upload to Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
           tag_name: ${{ steps.version.outputs.version }}
@@ -149,8 +188,11 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          fail_on_unmatched_files: true
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
 
   docker:
     name: Build and Push Docker Images
