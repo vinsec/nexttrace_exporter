@@ -1,0 +1,26 @@
+# NextTrace Exporter Configuration Example
+
+targets:
+  # Google DNS
+  - host: 8.8.8.8
+    name: google_dns
+    interval: 5m
+    max_hops: 30
+
+  # Cloudflare DNS
+  - host: 1.1.1.1
+    name: cloudflare_dns
+    interval: 10m
+    max_hops: 30
+
+  # Custom target with custom interval
+  - host: www.google.com
+    name: google_com
+    interval: 15m
+    max_hops: 20
+
+  # IPv6 target example
+  - host: 2001:4860:4860::8888
+    name: google_dns_ipv6
+    interval: 10m
+    max_hops: 30

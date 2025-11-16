@@ -1,0 +1,41 @@
+# Binaries
+nexttrace_exporter
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+*.test
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+LICENSE
+
+# Examples (include them actually)
+!examples/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/

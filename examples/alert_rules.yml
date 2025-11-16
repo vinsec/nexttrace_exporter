@@ -1,0 +1,85 @@
+# Prometheus Alert Rules for NextTrace Exporter
+
+groups:
+  - name: nexttrace_alerts
+    interval: 30s
+    rules:
+      # Alert when nexttrace execution fails
+      - alert: NextTraceExecutionFailed
+        expr: increase(nexttrace_executions_total{status="error"}[5m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NextTrace execution failing for target {{ $labels.target }}"
+          description: "NextTrace has failed {{ $value }} times in the last 5 minutes for target {{ $labels.target }}"
+
+      # Alert when nexttrace execution times out
+      - alert: NextTraceExecutionTimeout
+        expr: increase(nexttrace_executions_total{status="timeout"}[10m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NextTrace execution timeout for target {{ $labels.target }}"
+          description: "NextTrace has timed out {{ $value }} times in the last 10 minutes for target {{ $labels.target }}"
+
+      # Alert when no successful executions in a while
+      - alert: NextTraceNoRecentExecution
+        expr: time() - nexttrace_last_execution_timestamp > 900
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No recent successful NextTrace execution for {{ $labels.target }}"
+          description: "NextTrace hasn't successfully executed for target {{ $labels.target }} in over 15 minutes"
+
+      # Alert when execution duration is too high
+      - alert: NextTraceSlowExecution
+        expr: nexttrace_execution_duration_seconds > 60
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NextTrace execution slow for {{ $labels.target }}"
+          description: "NextTrace execution took {{ $value }}s for target {{ $labels.target }}, exceeding 60s threshold"
+
+      # Alert when packet loss is detected
+      - alert: NextTracePacketLoss
+        expr: nexttrace_hop_loss_ratio > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Packet loss detected on route to {{ $labels.target }}"
+          description: "Hop {{ $labels.hop_number }} ({{ $labels.hop_ip }}) shows {{ $value | humanizePercentage }} packet loss to target {{ $labels.target }}"
+
+      # Alert when RTT is abnormally high
+      - alert: NextTraceHighRTT
+        expr: nexttrace_hop_rtt_milliseconds > 500
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High RTT detected on route to {{ $labels.target }}"
+          description: "Hop {{ $labels.hop_number }} ({{ $labels.hop_ip }}) shows {{ $value }}ms RTT to target {{ $labels.target }}"
+
+      # Alert when route changes (hop count changes significantly)
+      - alert: NextTraceRouteChange
+        expr: abs(delta(nexttrace_total_hops[30m])) > 3
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "Route change detected for {{ $labels.target }}"
+          description: "Total hop count changed by {{ $value }} hops for target {{ $labels.target }} in the last 30 minutes"
+
+      # Alert when exporter is down
+      - alert: NextTraceExporterDown
+        expr: up{job="nexttrace"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "NextTrace Exporter is down"
+          description: "NextTrace Exporter has been down for more than 2 minutes"
