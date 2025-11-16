@@ -106,12 +106,23 @@ jobs:
           ARTIFACT="${{ steps.build.outputs.artifact }}"
           ARCHIVE_NAME="${ARTIFACT%.*}.tar.gz"
           
+          # Prepare files to include
+          FILES="${ARTIFACT} ${ARTIFACT}.sha256 README.md LICENSE"
+          
+          # Add config.yml if exists
+          if [ -f "config.yml" ]; then
+            FILES="${FILES} config.yml"
+          elif [ -f "examples/config.yml" ]; then
+            cp examples/config.yml config.yml.example
+            FILES="${FILES} config.yml.example"
+          fi
+          
           # For Windows, create .zip instead
           if [ "${{ matrix.goos }}" = "windows" ]; then
             ARCHIVE_NAME="${ARTIFACT%.*}.zip"
-            zip "${ARCHIVE_NAME}" "${ARTIFACT}" "${ARTIFACT}.sha256" README.md LICENSE config.yml
+            zip "${ARCHIVE_NAME}" ${FILES}
           else
-            tar czf "${ARCHIVE_NAME}" "${ARTIFACT}" "${ARTIFACT}.sha256" README.md LICENSE config.yml
+            tar czf "${ARCHIVE_NAME}" ${FILES}
           fi
           
           echo "archive=${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
