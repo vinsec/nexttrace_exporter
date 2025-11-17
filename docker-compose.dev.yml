@@ -1,0 +1,26 @@
+# Development/Testing Docker Compose Configuration
+# Use this for local development and testing with locally built images
+
+services:
+  nexttrace_exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: dev
+        BUILD_TIME: ${BUILD_TIME:-dev}
+        GIT_COMMIT: ${GIT_COMMIT:-dev}
+    container_name: nexttrace_exporter_dev
+    ports:
+      - "9101:9101"
+    volumes:
+      - ./examples/config.yml:/etc/nexttrace_exporter/config.yml:ro
+    cap_add:
+      - NET_RAW
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9101/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

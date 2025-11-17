@@ -5,12 +5,13 @@
 server:
   # Listen address for the HTTP server
   # Default: localhost:9101 (local only, recommended for security)
+  # For Docker/container deployments, use 0.0.0.0:9101 to accept connections from outside
   # Examples:
-  #   - localhost:9101  (local only)
-  #   - 0.0.0.0:9101    (all interfaces)
+  #   - localhost:9101  (local only, recommended for non-container deployments)
+  #   - 0.0.0.0:9101    (all interfaces, required for containers)
   #   - :9101           (all interfaces, short form)
   #   - 192.168.1.100:9101  (specific IP)
-  listen_address: localhost:9101
+  listen_address: 0.0.0.0:9101
   
   # Path where metrics are exposed
   # Default: /metrics

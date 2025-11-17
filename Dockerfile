@@ -15,9 +15,17 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
+# Build arguments for multi-architecture support
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
+# Build the application with version information
+ARG VERSION=dev
+ARG BUILD_TIME
+ARG GIT_COMMIT
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+    -ldflags="-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT}" \
     -o nexttrace_exporter \
     .
 
@@ -33,8 +41,14 @@ RUN curl -sL nxtrace.org/nt | bash
 # Stage 3: Final runtime image
 FROM alpine:latest
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+# Add labels for better container management
+LABEL maintainer="vinsec" \
+      description="Prometheus exporter for NextTrace network path tracing" \
+      org.opencontainers.image.source="https://github.com/vinsec/nexttrace_exporter" \
+      org.opencontainers.image.licenses="MIT"
+
+# Install runtime dependencies (wget needed for healthcheck)
+RUN apk add --no-cache ca-certificates tzdata wget
 
 # Copy nexttrace binary from installer stage
 COPY --from=nexttrace-installer /usr/local/bin/nexttrace /usr/local/bin/nexttrace
@@ -42,18 +56,13 @@ COPY --from=nexttrace-installer /usr/local/bin/nexttrace /usr/local/bin/nexttrac
 # Copy exporter binary from builder stage
 COPY --from=builder /build/nexttrace_exporter /usr/local/bin/nexttrace_exporter
 
-# Create non-root user (note: exporter needs NET_RAW capability)
-RUN addgroup -g 1000 nexttrace && \
-    adduser -D -u 1000 -G nexttrace nexttrace
-
 # Create config directory
-RUN mkdir -p /etc/nexttrace_exporter && \
-    chown -R nexttrace:nexttrace /etc/nexttrace_exporter
+RUN mkdir -p /etc/nexttrace_exporter
 
-# Switch to non-root user
-USER nexttrace
+# Note: Running as root is required for nexttrace to have raw network socket access
+# This is necessary for ICMP operations used in traceroute functionality
 
-WORKDIR /home/nexttrace
+WORKDIR /root
 
 # Expose metrics port
 EXPOSE 9101
